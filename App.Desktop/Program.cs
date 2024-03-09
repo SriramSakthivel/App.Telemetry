@@ -23,14 +23,30 @@ namespace App.Desktop
     {
       var logger = LogManager.GetLogger<Program>();
  
-      Thread.Sleep(20000);
+      Thread.Sleep(10000);
 
       logger.Info("Hello");
 
       int number = 0;
       while (number < 100)
       {
-        logger.Info("Hellooooooo " + DateTime.Now);
+        if (number % 5 == 0)
+        {
+          try
+          {
+            throw new InvalidOperationException("some random exception");
+          }
+          catch (Exception e)
+          {
+            logger.Error("Something failed", e);
+          }
+       
+        }
+        else
+        {
+          logger.Info("Hellooooooo " + DateTime.Now);
+        }
+
         Thread.Sleep(1000);
         number++;
       }
@@ -71,6 +87,7 @@ namespace App.Desktop
     protected override void Write(AsyncLogEventInfo logEvent)
     {
       logEvent.LogEvent.Properties["sessionId"] = sessionIdTask.Result;
+      logEvent.LogEvent.Properties["userName"] = Environment.UserName;
       WrappedTarget.WriteAsyncLogEvent(logEvent);
       //base.Write(logEvent);
     }

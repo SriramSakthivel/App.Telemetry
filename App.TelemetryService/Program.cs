@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Caching.Memory;
+using NLog.Extensions.Logging;
 
 namespace App.TelemetryService
 {
@@ -6,11 +7,20 @@ namespace App.TelemetryService
   {
     public static void Main(string[] args)
     {
+      var logger = NLog.Web.NLogBuilder.ConfigureNLog("nlog.config").GetCurrentClassLogger();
+      logger.Info("App Started");
+
       var builder = WebApplication.CreateBuilder(args);
+
+      builder.Logging.ClearProviders();
+      builder.Logging.SetMinimumLevel(Microsoft.Extensions.Logging.LogLevel.Trace);
+      builder.Logging.AddNLog();
 
       // Add services to the container.
 
       builder.Services.AddSingleton<IMemoryCache, MemoryCache>();
+
+
 
 
       builder.Services.AddControllers();

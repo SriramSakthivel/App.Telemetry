@@ -1,6 +1,10 @@
+using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Memory;
 using System.Xml.Linq;
+using NLog;
+using NLog.Layouts;
+using LogLevel = NLog.LogLevel;
 
 namespace App.TelemetryService.Controllers
 {
@@ -28,38 +32,40 @@ namespace App.TelemetryService.Controllers
       }
 
       string sessionId = $"{request.UserName}-{request.SessionTime:s}-{Guid.NewGuid()}";
-      await cache.GetOrCreateAsync(sessionId, entry => Task.FromResult(""));
+      //LogManager.Configuration.AddTarget();
+
+      await cache.GetOrCreateAsync<SessionRequest>(sessionId, entry => Task.FromResult(request));
       return Ok(sessionId);
     }
 
     [HttpPost]
     [Consumes("application/json")]
     [Route("LogEvent")]
-    public async Task<ActionResult<string>> NewLogEventAsync([FromBody] LogEvent request)
+    public async Task<ActionResult<string>> NewLogEventAsync([FromBody] JsonObject request)
     {
       //if (string.IsNullOrEmpty(request.UserName) || request.SessionTime == DateTime.MinValue)
       //{
       //  return BadRequest();
       //}
+      string sessionId = request["sessionId"]?.ToString();
+      var session = cache.Get<SessionRequest>(sessionId);
 
-      Console.WriteLine(request.Message);
-      
+      LogEventInfo logEventInfo = new LogEventInfo()
+      {
+        Message = request["message"]?.ToString(),
+        Level = LogLevel.FromString(request["level"]?.ToString()),
+        LoggerName = request["logger"]?.ToString(),
+        Properties =
+        {
+          { "sessionId", sessionId },
+          { "userName", session.UserName },
+        },
+      };
+      LogManager.GetLogger(sessionId).Log(logEventInfo);
+      Console.WriteLine(request);
+
 
       return Ok();
     }
-  }
-
-  public class SessionRequest
-  {
-    public string UserName { get; set; }
-    public DateTime SessionTime { get; set; }
-  }
-
-  public class LogEvent
-  {
-    public string? SessionId { get; set; }
-    public string? Message { get; set; }
-    public string? Level { get; set; }
-    public string? Logger { get; set; }
   }
 }
