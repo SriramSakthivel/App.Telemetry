@@ -1,18 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Net.Http;
-using System.Net.Http.Headers;
 using System.Runtime.CompilerServices;
-using System.Text;
 using System.Threading;
-using System.Threading.Tasks;
+using Newtonsoft.Json.Linq;
 using NLog;
-using NLog.Common;
 using NLog.Config;
 using NLog.Layouts;
-using NLog.Targets;
-using NLog.Targets.Wrappers;
 using LogManager = Common.Logging.LogManager;
 
 namespace App.Desktop
@@ -21,11 +15,16 @@ namespace App.Desktop
   {
     static void Main(string[] args)
     {
+      string userName = args.Length > 0 ? args[0] : Environment.UserName;
+      string machineName = args.Length > 1 ? args[1] : Environment.MachineName;
+
+      GlobalDiagnosticsContext.Set("UserName", userName);
+      GlobalDiagnosticsContext.Set("MachineName", machineName);
+
       var logger = LogManager.GetLogger<Program>();
- 
       Thread.Sleep(10000);
 
-      logger.Info("Hello");
+      logger.Info($"Hello from {userName} {machineName}");
 
       int number = 0;
       while (number < 100)
@@ -38,65 +37,20 @@ namespace App.Desktop
           }
           catch (Exception e)
           {
-            logger.Error("Something failed", e);
+            logger.Error($"Something failed {number}", e);
           }
-       
         }
         else
         {
-          logger.Info("Hellooooooo " + DateTime.Now);
+          logger.Info($"Hello {number} from user User={userName}, Machine={machineName}");
         }
 
-        Thread.Sleep(1000);
+        Thread.Sleep(250);
         number++;
       }
-
+      logger.Info("Done, waiting to be closed.");
       Console.ReadLine();
+      NLog.LogManager.Shutdown();
     }
-  }
-
-  [Target("LoggingService", IsWrapper = true)]
-  public class LoggingServiceTarget : WrapperTargetBase
-  {
-    public LoggingServiceTarget()
-    {
-
-    }
-
-    private Task<string> sessionIdTask;
-    protected override void InitializeTarget()
-    {
-      base.InitializeTarget();
-
-      sessionIdTask = CreateSessionAsync();
-    }
-
-    private async Task<string> CreateSessionAsync()
-    {
-      HttpClient client = new HttpClient();
-      client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("*/*"));
-      var response = await client.PostAsync("https://localhost:7027/api/Logging/CreateLogSession", new StringContent(DefaultJsonSerializer.Instance.SerializeObject(new
-      {
-        UserName = Environment.UserName,
-        SessionTime = DateTime.Now,
-      }), Encoding.UTF8, "application/json"));
-      response.EnsureSuccessStatusCode();
-      return await response.Content.ReadAsStringAsync();
-    }
-
-    protected override void Write(AsyncLogEventInfo logEvent)
-    {
-      logEvent.LogEvent.Properties["sessionId"] = sessionIdTask.Result;
-      logEvent.LogEvent.Properties["userName"] = Environment.UserName;
-      WrappedTarget.WriteAsyncLogEvent(logEvent);
-      //base.Write(logEvent);
-    }
-
-    //protected override async Task WriteAsyncTask(LogEventInfo logEvent, CancellationToken cancellationToken)
-    //{
-    //  //string sessionId = await sessionIdTask;
-    //  //Target.WriteAsyncLogEvent(new AsyncLogEventInfo(logEvent, exception => { }));
-    //  return;
-    //}
   }
 }

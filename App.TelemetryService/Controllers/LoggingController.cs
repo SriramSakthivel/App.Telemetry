@@ -24,18 +24,36 @@ namespace App.TelemetryService.Controllers
     [HttpPost]
     [Consumes("application/json")]
     [Route("CreateLogSession")]
-    public async Task<ActionResult<string>> CreateLogSessionAsync([FromBody] SessionRequest request)
+    public async Task<ActionResult<SessionInfo>> CreateLogSessionAsync([FromBody] SessionRequest request)
     {
-      if (string.IsNullOrEmpty(request.UserName) || request.SessionTime == DateTime.MinValue)
+      if (string.IsNullOrWhiteSpace(request.UserName) || string.IsNullOrWhiteSpace(request.MachineName) || request.LocalTime == DateTime.MinValue)
       {
         return BadRequest();
       }
 
-      string sessionId = $"{request.UserName}-{request.SessionTime:s}-{Guid.NewGuid()}";
-      //LogManager.Configuration.AddTarget();
+      string sessionId = $"{request.UserName}-{request.MachineName}-{request.LocalTime:yyyyMMddHHmmssfff}-{Guid.NewGuid()}";
+      var sessionInfo = await cache.GetOrCreateAsync<SessionInfo>(sessionId, entry =>
+      {
+        return Task.FromResult(new SessionInfo(sessionId, request.UserName, request.MachineName, DateTime.UtcNow));
+      });
+      Console.WriteLine($"Session Created. SessionId={sessionInfo.SessionId}, User={sessionInfo.UserName}, Machine={sessionInfo.MachineName}");
+      return Ok(sessionInfo);
+    }
 
-      await cache.GetOrCreateAsync<SessionRequest>(sessionId, entry => Task.FromResult(request));
-      return Ok(sessionId);
+    [HttpPost]
+    [Consumes("application/json")]
+    [Route("EndLogSession")]
+    public async Task<IActionResult> EndLogSessionAsync([FromBody] SessionEndRequest request)
+    {
+      if (string.IsNullOrWhiteSpace(request.SessionId))
+      {
+        return BadRequest();
+      }
+      LogManager.Flush();
+      var session = cache.Get<SessionInfo>(request.SessionId);
+      cache.Remove(request.SessionId);
+      Console.WriteLine($"Session Ended. SessionId={request.SessionId}, User={session?.UserName}, Machine={session?.MachineName}");
+      return Ok();
     }
 
     [HttpPost]
@@ -48,7 +66,7 @@ namespace App.TelemetryService.Controllers
       //  return BadRequest();
       //}
       string sessionId = request["sessionId"]?.ToString();
-      var session = cache.Get<SessionRequest>(sessionId);
+      var session = cache.Get<SessionInfo>(sessionId);
 
       LogEventInfo logEventInfo = new LogEventInfo()
       {
@@ -59,12 +77,10 @@ namespace App.TelemetryService.Controllers
         {
           { "sessionId", sessionId },
           { "userName", session.UserName },
-        },
+        }
       };
       LogManager.GetLogger(sessionId).Log(logEventInfo);
       Console.WriteLine(request);
-
-
       return Ok();
     }
   }
